@@ -80,9 +80,13 @@ void loop(){
     Serial.println("Wifi disconnected");
   }
 
-  // resetting logic
-  if (message = "default") {
+  // resetting/winning logic
+  if (message == "default") {
     messageToSend = "default";
+  }
+  else if (message == "youwon") {
+    messageToSend = "youwon";
+    return;
   }
 
   // game over logic
@@ -93,6 +97,7 @@ void loop(){
   else if (message == "scanned") {
     mytime = millis();
     while (millis() <= mytime + 5000) {
+      Serial.println("waiting");
       if (rfid.PICC_IsNewCardPresent()) {
         gameOver = true;
         messageToSend = "youwon";
