@@ -48,10 +48,10 @@ Adafruit_ILI9341 tft = Adafruit_ILI9341(TFT_CS, TFT_DC, TFT_MOSI, TFT_CLK, TFT_R
 #define WHITE    0xFFFF
 
 // game parameters
-#define TOTAL_TIME 120 // seconds
+#define TOTAL_TIME 1800 // seconds
 #define TOTAL_BOXES 5
 #define NUM_BOXES 4 // total boxes required per team
-#define TOTAL_CLUES 2 // number of clues possible per box
+#define TOTAL_CLUES 1 // number of clues possible per box
 #define NUM_CLUES 1 // number of clues implemented in game
 #define TOTAL_HINTS 1 // number of hints possible per box
 #define NUM_HINTS 1 // number of hints implemented in game
@@ -62,20 +62,30 @@ Adafruit_ILI9341 tft = Adafruit_ILI9341(TFT_CS, TFT_DC, TFT_MOSI, TFT_CLK, TFT_R
 
 // clues
 static const String clues_array[TOTAL_BOXES][TOTAL_CLUES] PROGMEM = { 
-  {"Box 1, Clue 1: ", "Box 1, Clue 2: "},
-  {"Box 2, Clue 1: ", "Box 2, Clue 2: "},
-  {"Box 3, Clue 1: ", "Box 3, Clue 2: "},
-  {"Box 4, Clue 1: ", "Box 4, Clue 2: "},
-  {"Box 5, Clue 1: ", "Box 5, Clue 2: "}
+  {"Box 1, Riddle 1: An unusual cascade defines me, Students avoid me until they graduate with certainty"},
+  //{"Box 2, Riddle 1: Only students of this school may enter; far from west campus, even campus center"},
+  //{"Box 3, Riddle 1: The outside entrance to a room that often holds lectures in large groups, located in one of the first four buildings built on campus too"},
+  {"Box 2, Riddle 1: Outside where research and labs take place, find yourself in the middle of this flat open space. The most confusing floors of any building, adjacent to the young hall wing"},
+  //{"Box 5, Riddle 1: One of a kind with no counterpart, a place on campus with lots of art"} 
+  {"Box 3, Riddle 1: In between moore hall and the physics and astronomy building, a long non-winding street is definitely the most thrilling"}, 
+  {"Box 4, Riddle 1: When you're about to fall asleep, go here and buy yourself something caffeinated and sweet. But don't stop there, step right outside to get some fresh air"},
+  // {"Box 8, Riddle 1: In the stretch of land with figures and grass, you'd come over here to stroll and take a break from class"},
+  {"Box 5, Riddle 1: Once the birthplace of the internet, learn things here once and you'll never forget"}
+  // {"Box 10, Riddle 1: Before you take a stroll around the block, first consider a triangular walk"}
 };
 
 // hints
 static const String hints_array[TOTAL_BOXES][TOTAL_HINTS] PROGMEM = {
-  {"Box 1, Hint 1: "},
-  {"Box 2, Hint 1: "},
-  {"Box 3, Hint 1: "},
-  {"Box 4, Hint 1: "},
-  {"Box 5, Hint 1: "}
+  {"Box 1, Riddle 2: In between here and the freedom of liberty, find ivory keys next to annoying fruit trees"},
+  //{"Box 2, Riddle 2: Across the street toward the end, a gesture from the school of an act to mend"},
+  //{"Box 3, Riddle 2: In a place that resembles a couch, a seat in which no one cares if you slouch"},
+  {"Box 2, Riddle 2: its presence may have never been told, but look toward boelter for something gold"},
+  //{"Box 5, Riddle 2: Take a stroll down the steps and took at a reflection of your nice biceps"} 
+  {"Box 3, Riddle 2: Down the road away from math sci, you'll find an entrance to a basement"}, 
+  {"Box 4, Riddle 2: Make your way up the stairs, to the place where the film between motion picture and reality tears"},
+  // {"Box 8, Riddle 2: Now, now, don't you dare settle, look around until you see a large hunk of rusted metal. It may not be pretty, it may not be yellow, but scream and holler and I promise it'll echo"},
+  {"Box 5, Riddle 2: Go to the highest floor, and around the corner is the nicest view you've ever seen before"},
+  // {"Box 10, Riddle 2: Across the pathways away from Powell, an entrance who's building's name has three letters, one vowel (acronym)"}
 };
 
 // game parameters, continued
@@ -153,8 +163,8 @@ bool IRAM_ATTR TimerHandler0(void * timerNo)
 
 void setup(){
   // Serial port for debugging purposes
-  Serial.begin(9600);
-  Serial.println();
+  // Serial.begin(9600);
+  // Serial.println();
 
   pinMode(RELAY_PIN, OUTPUT);
  
@@ -173,13 +183,13 @@ void setup(){
   setupOLED();
   
   // Setting the ESP as an access point
-  Serial.print("Setting AP (Access Point)…");
+  //Serial.print("Setting AP (Access Point)…");
   // Remove the password parameter, if you want the AP (Access Point) to be open
   WiFi.softAP(ssid, password);
 
   IPAddress IP = WiFi.softAPIP();
-  Serial.print("AP IP address: ");
-  Serial.println(IP);
+  // Serial.print("AP IP address: ");
+  // Serial.println(IP);
 
   // url to send game data
   server.on("/two", HTTP_GET, [](AsyncWebServerRequest *request){
@@ -195,7 +205,7 @@ void setup(){
  
 void loop(){
   check_start();
-  Serial.println("remaining_time: " + String(remaining_time));
+  //Serial.println("remaining_time: " + String(remaining_time));
   if (start)
   {
     check_scan();
@@ -214,10 +224,10 @@ void loop(){
   // receiving message from the other esp
   if(WiFi.status()== WL_CONNECTED){ 
     message = httpGETRequest(serverName);
-    Serial.println(message);
+    //Serial.println(message);
   }
   else {
-    Serial.println("Wifi disconnected");
+    //Serial.println("Wifi disconnected");
   }
   
   if (rfid.PICC_IsNewCardPresent()) {
@@ -231,13 +241,13 @@ void loop(){
       bool found_valid_tag = false;
       for (int i = 0; i < NUM_TAGS; i++) {
         if (uid == TAG_UIDS[current_box_num]) {
-          Serial.print("Found: ");
-          Serial.println(uid, HEX);
+          // Serial.print("Found: ");
+          // Serial.println(uid, HEX);
           found_valid_tag = true;
         }
       }
       if (!found_valid_tag) {
-        Serial.println("Invalid tag scanned!");
+        //Serial.println("Invalid tag scanned!");
         return;
       }
       messageToSend = "scanned";
@@ -246,10 +256,10 @@ void loop(){
     }
   }
   if (messageToSend == "scanned" && millis() <= mytime + 5000) {
-    Serial.println("waiting");
+    //Serial.println("waiting");
     if (message == "scanned") {
       scan_complete = true;
-      delay(500);
+      delay(1000);
       messageToSend = "default";
       message = "default";
       digitalWrite(SCAN_LED, LOW);
@@ -289,14 +299,14 @@ String httpGETRequest(const char* serverName) {
 
 void connectToOtherTeam() {
   WiFi.begin(other_ssid, other_password);
-  Serial.println("Connecting");
+  //Serial.println("Connecting");
   while(WiFi.status() != WL_CONNECTED) { 
     delay(500);
-    Serial.print(".");
+    //Serial.print(".");
   }
-  Serial.println("");
-  Serial.print("Connected to WiFi network with IP Address: ");
-  Serial.println(WiFi.localIP());
+  // Serial.println("");
+  // Serial.print("Connected to WiFi network with IP Address: ");
+  // Serial.println(WiFi.localIP());
 }
 
 void setupOLED() {
@@ -323,15 +333,17 @@ void setupOLED() {
   for (int i = 0; i < NUM_BOXES; i++)
     for (int j = 0; j < NUM_CLUES; j++)
     {
+      // chosen_clues[i][j] = clues_array[box_nums[i]][clue_nums[i][j]];
       chosen_clues[i][j] = clues_array[i][clue_nums[i][j]];
-      Serial.println(chosen_clues[i][j]);
+      //Serial.println(chosen_clues[i][j]);
     }
 
   for (int i = 0; i < NUM_BOXES; i++)
     for (int j = 0; j < NUM_HINTS; j++)
     {
+      // chosen_hints[i][j] = hints_array[box_nums[i]][hint_nums[i][j]];
       chosen_hints[i][j] = hints_array[i][hint_nums[i][j]];
-      Serial.println(chosen_hints[i][j]);
+      //Serial.println(chosen_hints[i][j]);
     }
   
   tft.setCursor(20, 20);
@@ -361,9 +373,9 @@ void check_win() {
     start = false;
     clear_screen();
     tft.setCursor(20, 20);
-    tft.setTextSize(4);
-    tft.setTextColor(GREEN, BLACK);
-    tft.println("YOU WIN!!!");
+    tft.setTextSize(3);
+    tft.setTextColor(YELLOW, BLUE);
+    tft.println("YOU SAVED UCLA!");
     tft.setCursor(20, 80);
     tft.setTextSize(2);
     tft.print("Elapsed Time: ");
@@ -382,8 +394,11 @@ void check_lose() {
     clear_screen();
     tft.setCursor(20, 20);
     tft.setTextSize(4);
-    tft.setTextColor(RED, BLACK);
+    tft.setTextColor(YELLOW, RED);
     tft.println("YOU LOSE");
+    tft.setCursor(0, 80);
+    tft.setTextSize(2);
+    tft.println("USC HAS BLOWN UP YOUR POWER SYSTEMS! WOMP WOMP");
     delay(10000); 
     setupOLED();
   }
