@@ -2,6 +2,7 @@
 #include "WiFi.h"
 #include "Adafruit_GFX.h"
 #include "Adafruit_ILI9341.h"
+#include "ESP32TimerInterrupt.h"
 
 #include <AsyncFsWebServer.h>
 #include <HTTPClient.h>
@@ -24,6 +25,9 @@
 
 #define START_BUTTON 15
 #define HINT_BUTTON 17
+#define RELAY_PIN 32
+#define SCAN_LED 25
+#define TIMER0_INTERVAL_MS 1000
 
 // rfid initialization
 // MFRC522_I2C rfid(0x28, RST_PIN);
@@ -52,6 +56,10 @@ Adafruit_ILI9341 tft = Adafruit_ILI9341(TFT_CS, TFT_DC, TFT_MOSI, TFT_CLK, TFT_R
 #define TOTAL_HINTS 1 // number of hints possible per box
 #define NUM_HINTS 1 // number of hints implemented in game
 
+#define NUM_TAGS 5
+
+#define _TIMERINTERRUPT_LOGLEVEL_ 4
+
 // clues
 static const String clues_array[TOTAL_BOXES][TOTAL_CLUES] PROGMEM = { 
   {"Box 1, Clue 1: ", "Box 1, Clue 2: "},
@@ -78,6 +86,7 @@ static int clue_nums[NUM_BOXES][NUM_CLUES]; // randomly selected clue numbers
 static int hint_nums[NUM_BOXES][NUM_HINTS]; // randomly selected hint numbers
 static String chosen_clues[NUM_BOXES][NUM_CLUES];
 static String chosen_hints[NUM_BOXES][NUM_HINTS];
+int TAG_UIDS[NUM_TAGS] = { 0x214DA12E, 0x4373C012, 0x6365C212, 0x0B47501B, 0x93C92D1C };
 
 // function declarations
 void generate_boxes(int *arr, int length, int range);
@@ -119,10 +128,38 @@ String messageToSend = "default";
 String message = "default";
 unsigned long mytime;
 
+unsigned long volatile timer_count = 0;
+
+// Init ESP32 timer 0
+ESP32Timer ITimer0(0);
+
+bool IRAM_ATTR TimerHandler0(void * timerNo)
+{
+    timer_count += 1;
+    //other 10
+    if (timer_count > 10)
+    {
+      digitalWrite(RELAY_PIN, HIGH);
+      //other 14
+      if (timer_count > 14)
+        digitalWrite(RELAY_PIN, LOW);
+      if (timer_count >= 16)
+        timer_count = 0;
+    } else
+      digitalWrite(RELAY_PIN, LOW);
+    
+    return true;
+}
+
 void setup(){
   // Serial port for debugging purposes
   Serial.begin(9600);
   Serial.println();
+
+  pinMode(RELAY_PIN, OUTPUT);
+ 
+  // Interval in microsecs
+  ITimer0.attachInterruptInterval(TIMER0_INTERVAL_MS * 1000, TimerHandler0);
 
   // RFID setup
   SPI.begin(); // init SPI bus
@@ -130,6 +167,7 @@ void setup(){
 
   pinMode(START_BUTTON, INPUT_PULLUP);
   pinMode(HINT_BUTTON, INPUT_PULLUP);
+  pinMode(SCAN_LED, OUTPUT);
 
   // oled setup
   setupOLED();
@@ -173,11 +211,6 @@ void loop(){
   }
   else return;
 
-  // if (messageToSend == "scan_complete") {
-  //   Serial.println("Scan Complete");
-  //   return;
-  // }
-
   // receiving message from the other esp
   if(WiFi.status()== WL_CONNECTED){ 
     message = httpGETRequest(serverName);
@@ -186,42 +219,31 @@ void loop(){
   else {
     Serial.println("Wifi disconnected");
   }
-
-  // resetting/winning logic
-  // if (message == "default") {
-  //   messageToSend = "default";
-  // }
-  // else if (message == "scan_complete") {
-  //   messageToSend = "scan_complete";
-  //   return;
-  // }
-
-  // game over logic
-  // if (messageToSend == "scanned" && message == "scanned") {
-  //   messageToSend = "scan_complete";
-  //   return;
-  // }
-  // else if (message == "scanned") {
-  //   mytime = millis();
-  //   while (millis() <= mytime + 5000) {
-  //     Serial.println("waiting");
-  //     if (rfid.PICC_IsNewCardPresent()) {
-  //       messageToSend = "scan_complete";
-  //       return;
-  //     }
-  //   }
-
-  //   messageToSend = "default";
-  //   return;
-  // }
-  // else if (rfid.PICC_IsNewCardPresent()) {
-  //   messageToSend = "scanned";
-  //   delay(1000);
-  // }
   
   if (rfid.PICC_IsNewCardPresent()) {
-    messageToSend = "scanned";
-    mytime = millis();
+    if (rfid.PICC_ReadCardSerial()) {  // NUID has been readed
+      // print UID in Serial Monitor in the hex format
+      int uid = 0;
+      for (int i = 0; i < rfid.uid.size; i++) {
+        uid = (uid << 8) + rfid.uid.uidByte[i];
+      }
+
+      bool found_valid_tag = false;
+      for (int i = 0; i < NUM_TAGS; i++) {
+        if (uid == TAG_UIDS[current_box_num]) {
+          Serial.print("Found: ");
+          Serial.println(uid, HEX);
+          found_valid_tag = true;
+        }
+      }
+      if (!found_valid_tag) {
+        Serial.println("Invalid tag scanned!");
+        return;
+      }
+      messageToSend = "scanned";
+      digitalWrite(SCAN_LED, HIGH);
+      mytime = millis();
+    }
   }
   if (messageToSend == "scanned" && millis() <= mytime + 5000) {
     Serial.println("waiting");
@@ -230,11 +252,13 @@ void loop(){
       delay(500);
       messageToSend = "default";
       message = "default";
+      digitalWrite(SCAN_LED, LOW);
     }
   } else if (millis() > mytime + 5000)
+  {
     messageToSend = "default";
-  
-
+    digitalWrite(SCAN_LED, LOW);
+  }
 }
 
 String httpGETRequest(const char* serverName) {
@@ -285,6 +309,8 @@ void setupOLED() {
   remaining_time = TOTAL_TIME;
   elapsed_time = 0;
   start = false;
+
+  ITimer0.stopTimer();
 
   tft.begin();
   tft.setRotation(1);
@@ -372,6 +398,7 @@ void start_game() {
   clear_screen();
   start_time = millis();
   start = true;
+  ITimer0.restartTimer();
 }
 
 // display text
