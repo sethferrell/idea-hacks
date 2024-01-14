@@ -85,6 +85,8 @@ void generate_hints(int arr[][NUM_HINTS], int length, int range);
 void setupOLED();
 
 void check_start();
+void check_scan();
+void check_win();
 void check_lose();
 void start_game();
 void update_display();
@@ -98,28 +100,43 @@ static bool scan_complete;
 
 // NETWORKING STUFF
 // Set your access point network credentials
-const char* ssid = "ESP32-Access-Point-2";
+const char* ssid = "ESP32-Access-Point-1";
 const char* password = "123456789";
 
 // other server's access points
-const char* other_ssid = "ESP32-Access-Point-1";
+const char* other_ssid = "ESP32-Access-Point-2";
 const char* other_password = "123456789";
-const char* serverName = "http://192.168.4.1/one";
-const char* statusPage = "http://192.168.4.1/status";
-const char* gameTime = "http://192.168.4.1/time";
-
+const char* serverName = "http://192.168.4.1/two";
 
 // Create AsyncWebServer object on port 80
 AsyncWebServer server(80);
 
-String messageToSend = "default";
-String message = "default";
+String messageToSend;
+String message;
 unsigned long mytime;
+
+String startMessage;
+String elapsed_time_string;
+
+// /////////////////////////////////////////////////////////// REMOVE THIS LATER WHEN MERGING W/ OLED CODE!!!!!!!!!!!!!!!!!!!!!!
+unsigned long gameTime = 100;
+
+// leaderboard stuff
+struct LeaderboardEntry {
+  String name;
+  unsigned long time;
+};
+
+struct LeaderboardEntry leaderboard[10];
+String leaderboardHTML = "";
 
 void setup(){
   // Serial port for debugging purposes
   Serial.begin(9600);
   Serial.println();
+
+  // sets leaderboard to all 0s
+  setupLeaderboard();
 
   // RFID setup
   SPI.begin(); // init SPI bus
@@ -138,10 +155,25 @@ void setup(){
   Serial.println(IP);
 
   // url to send game data
-  server.on("/two", HTTP_GET, [](AsyncWebServerRequest *request){
+  server.on("/one", HTTP_GET, [](AsyncWebServerRequest *request){
     request->send_P(200, "text/plain", messageToSend.c_str());
   });
+
+  // url for leaderboard
+  server.on("/leaderboard", HTTP_GET, [](AsyncWebServerRequest *request){
+    request->send_P(200, "text/html", leaderboardHTML.c_str());
+  });
+
+  // url for game status
+  server.on("/status", HTTP_GET, [](AsyncWebServerRequest *request){
+    request->send_P(200, "text/plain", startMessage.c_str());
+  });
   
+  // url for game time
+  server.on("/time", HTTP_GET, [](AsyncWebServerRequest *request){
+    request->send_P(200, "text/plain", elapsed_time_string.c_str());
+  });
+
   // Start server
   server.begin();
 
@@ -149,7 +181,6 @@ void setup(){
   connectToOtherTeam();
 }
  
-int scanned_count = 0;
 void loop(){
   check_start();
   Serial.println("remaining_time: " + String(remaining_time));
@@ -167,52 +198,34 @@ void loop(){
   }
   else return;
 
-  // if (messageToSend == "scan_complete") {
-  //   Serial.println("Scan Complete");
+  updateLeaderboard();
+  // if (scan_complete) {
+  //   messageToSend = "scan_complete";
+  //   Serial.println("scan_complete");
   //   return;
   // }
 
   // receiving message from the other esp
   if(WiFi.status()== WL_CONNECTED){ 
     message = httpGETRequest(serverName);
-    Serial.println(message);
+    Serial.println("received: " + message);
   }
   else {
     Serial.println("Wifi disconnected");
   }
 
-  // resetting/winning logic
-  // if (message == "default") {
-  //   messageToSend = "default";
-  // }
-  // else if (message == "scan_complete") {
-  //   messageToSend = "scan_complete";
-  //   return;
-  // }
-
-  // game over logic
-  // if (messageToSend == "scanned" && message == "scanned") {
-  //   messageToSend = "scan_complete";
-  //   return;
-  // }
-  // else if (message == "scanned") {
-  //   mytime = millis();
-  //   while (millis() <= mytime + 5000) {
-  //     Serial.println("waiting");
-  //     if (rfid.PICC_IsNewCardPresent()) {
-  //       messageToSend = "scan_complete";
-  //       return;
-  //     }
-  //   }
-
-  //   messageToSend = "default";
-  //   return;
-  // }
-  // else if (rfid.PICC_IsNewCardPresent()) {
-  //   messageToSend = "scanned";
-  //   delay(1000);
-  // }
+  // // resetting/winning logic
+  // // if (message == "default") {
+  // //   messageToSend = "default";
+  // // }
+  // // else if (message == "scan_complete") {
+  // //   messageToSend = "scan_complete";
+  // //   scan_complete = true;
+  // //   return;
+  // // }
   
+// // // // 
+
   if (rfid.PICC_IsNewCardPresent()) {
     messageToSend = "scanned";
     mytime = millis();
@@ -227,7 +240,6 @@ void loop(){
     }
   } else if (millis() > mytime + 5000)
     messageToSend = "default";
-  
 
 }
 
@@ -257,6 +269,33 @@ String httpGETRequest(const char* serverName) {
   return payload;
 }
 
+void setupLeaderboard() {
+  for (int i = 0; i < 10; ++i) {
+    leaderboard[i].name = "";
+    leaderboard[i].time = 0;
+  }
+}
+
+void updateLeaderboard() {
+  leaderboardHTML = "<!DOCTYPE html><html><head><title>LEADERBOARD</title></head><body>";
+
+  int i;
+  for (i = 0; i < 10; ++i) {
+    if (leaderboard[i].name == "" && leaderboard[i].time == 0) {
+      break;
+    }
+    else if (leaderboard[i].time < gameTime) {
+      leaderboardHTML += leaderboard[i].name + "   ...   " + String(leaderboard[i].time);
+      continue;
+    }
+    else if (leaderboard[i].time > gameTime) {
+      break;
+    }
+  }
+
+  leaderboardHTML += "</body></html>";
+}
+
 void connectToOtherTeam() {
   WiFi.begin(other_ssid, other_password);
   Serial.println("Connecting");
@@ -273,8 +312,10 @@ void setupOLED() {
   scan_complete = false;
   messageToSend = "default";
   message = "default";
-
-  current_box_num = NUM_BOXES/2;
+  startMessage = "false";
+  elapsed_time_string = "";
+  
+  current_box_num = 0;
   show_hint = false;
   remaining_time = TOTAL_TIME;
   elapsed_time = 0;
@@ -305,20 +346,52 @@ void setupOLED() {
   tft.setCursor(20, 20);
   tft.setTextSize(2);
   tft.setTextColor(WHITE, BLACK);
-  tft.println("Wait for Team 1 to Start");
+  tft.println("Press to Start");
 }
 
 void check_start() {
-  message = httpGETRequest(statusPage);
-  if (message == "true" && !start)
+  if (digitalRead(START_BUTTON) == LOW && !start)
+  {
+    startMessage = "true";  
     start_game();
+  }
 }
 
 void check_scan() {
-  if (scan_complete)
+  if (scan_complete) 
   {
     scan_complete = false;
-    current_box_num ++;
+    current_box_num++;
+  }
+}
+
+void check_win() {
+  if (current_box_num == NUM_BOXES/2)
+  {
+    start = false;
+    startMessage = "game over";
+    elapsed_time = millis() - start_time;
+    clear_screen();
+    tft.setCursor(20, 20);
+    tft.setTextSize(4);
+    tft.setTextColor(GREEN, BLACK);
+    tft.println("YOU WIN!!!");
+    tft.setCursor(20, 80);
+
+    elapsed_time_string += String(elapsed_time/60000) + ":";
+
+    if ((elapsed_time/1000)%60 < 10) elapsed_time_string += "0" + String((elapsed_time/1000)%60) + ".";
+    else elapsed_time_string += String((elapsed_time/1000)%60) + ".";
+
+    if ((elapsed_time%1000) < 10) elapsed_time_string += "00" + String(elapsed_time%1000);
+    else if ((elapsed_time%1000) < 100) elapsed_time_string += "0" + String(elapsed_time%1000);
+    else elapsed_time_string += String(elapsed_time%1000);
+    tft.setTextSize(2);
+    tft.print("Elapsed Time: " + elapsed_time_string);
+
+    delay(10000); 
+    clear_screen();
+    setupOLED();
   }
 }
 
@@ -350,7 +423,7 @@ void update_display() {
   tft.setTextSize(2);
   tft.print("Remaining Safes: ");
   tft.setTextColor(GREEN, BLACK);
-  tft.println(NUM_BOXES - current_box_num);
+  tft.println(NUM_BOXES/2 - current_box_num);
   tft.setCursor(4, 20);
   tft.setTextColor(WHITE, BLACK);
   tft.print("Remaining Time: ");
@@ -444,22 +517,4 @@ void generate_hints(int arr[][NUM_HINTS], int length, int range) {
       arr[i][j] = randomNumber;
     }
   }
-}
-
-void check_win() {
-  if (httpGETRequest(statusPage) == "game over"){
-    start = false;
-    clear_screen();
-    tft.setCursor(20, 20);
-    tft.setTextSize(4);
-    tft.setTextColor(GREEN, BLACK);
-    tft.println("YOU WIN!!!");
-    tft.setCursor(20, 80);
-    tft.setTextSize(2);
-    tft.print("Elapsed Time: ");
-    tft.print(httpGETRequest(gameTime));
-    delay(10000); 
-    clear_screen();
-    setupOLED();
-    }
 }

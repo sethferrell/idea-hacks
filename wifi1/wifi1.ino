@@ -26,7 +26,21 @@ String messageToSend = "default";
 bool gameOver = false;
 unsigned long mytime;
 
+/////////////////////////////////////////////////////////// REMOVE THIS LATER WHEN MERGING W/ OLED CODE!!!!!!!!!!!!!!!!!!!!!!
+unsigned long gameTime = 100;
+
+// leaderboard stuff
+struct LeaderboardEntry {
+  String name;
+  unsigned long time;
+};
+
+struct LeaderboardEntry leaderboard[10];
+String leaderboardHTML = "";
+
 void setup(){
+  setupLeaderboard();
+
   // RFID setup
   SPI.begin(); // init SPI bus
   rfid.PCD_Init(); // init MFRC522
@@ -44,26 +58,26 @@ void setup(){
   Serial.print("AP IP address: ");
   Serial.println(IP);
 
+  // url to send game data
   server.on("/one", HTTP_GET, [](AsyncWebServerRequest *request){
     request->send_P(200, "text/plain", messageToSend.c_str());
+  });
+
+  // url for leaderboard
+  server.on("/leaderboard", HTTP_GET, [](AsyncWebServerRequest *request){
+    //request->send_P(200, "text/plain", messageToSend.c_str());
+    request->send_P(200, "text/html", leaderboardHTML.c_str());
   });
   
   // Start server
   server.begin();
 
   // connecting to the other network:
-  WiFi.begin(other_ssid, other_password);
-  Serial.println("Connecting");
-  while(WiFi.status() != WL_CONNECTED) { 
-    delay(500);
-    Serial.print(".");
-  }
-  Serial.println("");
-  Serial.print("Connected to WiFi network with IP Address: ");
-  Serial.println(WiFi.localIP());
+  connectToOtherTeam();
 }
  
 void loop(){
+  updateLeaderboard();
   if (gameOver) {
     messageToSend = "youwon";
     Serial.println("You Won!");
@@ -72,7 +86,7 @@ void loop(){
 
   // receiving message from the other esp
   String message;
-  if(WiFi.status()== WL_CONNECTED ){ 
+  if(WiFi.status()== WL_CONNECTED){ 
     message = httpGETRequest(serverName);
     Serial.println(message);
   }
@@ -138,4 +152,43 @@ String httpGETRequest(const char* serverName) {
   http.end();
 
   return payload;
+}
+
+void setupLeaderboard() {
+  for (int i = 0; i < 10; ++i) {
+    leaderboard[i].name = "";
+    leaderboard[i].time = 0;
+  }
+}
+
+void updateLeaderboard() {
+  leaderboardHTML = "<!DOCTYPE html><html><head><title>LEADERBOARD</title></head><body>";
+
+  int i;
+  for (i = 0; i < 10; ++i) {
+    if (leaderboard[i].name == "" && leaderboard[i].time == 0) {
+      break;
+    }
+    else if (leaderboard[i].time < gameTime) {
+      leaderboardHTML += leaderboard[i].name + "   ...   " + String(leaderboard[i].time);
+      continue;
+    }
+    else if (leaderboard[i].time > gameTime) {
+      break;
+    }
+  }
+
+  leaderboardHTML += "</body></html>";
+}
+
+void connectToOtherTeam() {
+  WiFi.begin(other_ssid, other_password);
+  Serial.println("Connecting");
+  while(WiFi.status() != WL_CONNECTED) { 
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("");
+  Serial.print("Connected to WiFi network with IP Address: ");
+  Serial.println(WiFi.localIP());
 }

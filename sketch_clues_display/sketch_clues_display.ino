@@ -125,6 +125,8 @@ void loop() {
       update_display();
     }
   }
+  else
+    return;
 
   // at game end: elapsed_time = millis() - start_time;
 }
