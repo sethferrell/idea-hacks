@@ -21,7 +21,9 @@
 #define TFT_CLK 14 //18
 #define TFT_RST 0
 #define TFT_MISO 12 //19
+
 #define START_BUTTON 15
+#define HINT_BUTTON 17
 
 // rfid initialization
 // MFRC522_I2C rfid(0x28, RST_PIN);
@@ -86,6 +88,7 @@ void setupOLED();
 
 void check_start();
 void check_lose();
+void check_hint();
 void start_game();
 void update_display();
 void clear_screen();
@@ -125,6 +128,9 @@ void setup(){
   SPI.begin(); // init SPI bus
   rfid.PCD_Init(); // init MFRC522
 
+  pinMode(START_BUTTON, INPUT_PULLUP);
+  pinMode(HINT_BUTTON, INPUT_PULLUP);
+
   // oled setup
   setupOLED();
   
@@ -149,7 +155,6 @@ void setup(){
   connectToOtherTeam();
 }
  
-int scanned_count = 0;
 void loop(){
   check_start();
   Serial.println("remaining_time: " + String(remaining_time));
@@ -158,6 +163,7 @@ void loop(){
     check_scan();
     check_win();
     check_lose();
+    check_hint();
     if (!start) return;
     if (TOTAL_TIME - (millis()-start_time)/1000 <= remaining_time)
     {
@@ -317,9 +323,29 @@ void check_start() {
 void check_scan() {
   if (scan_complete)
   {
+    clear_screen();
     scan_complete = false;
+    show_hint = false;
     current_box_num ++;
   }
+}
+
+void check_win() {
+  if (httpGETRequest(statusPage) == "game over"){
+    start = false;
+    clear_screen();
+    tft.setCursor(20, 20);
+    tft.setTextSize(4);
+    tft.setTextColor(GREEN, BLACK);
+    tft.println("YOU WIN!!!");
+    tft.setCursor(20, 80);
+    tft.setTextSize(2);
+    tft.print("Elapsed Time: ");
+    tft.print(httpGETRequest(gameTime));
+    delay(10000); 
+    clear_screen();
+    setupOLED();
+    }
 }
 
 void check_lose() {
@@ -335,6 +361,11 @@ void check_lose() {
     delay(10000); 
     setupOLED();
   }
+}
+
+void check_hint() {
+  if (digitalRead(HINT_BUTTON) == LOW && !show_hint)
+    show_hint = true;
 }
 
 void start_game() {
@@ -367,10 +398,9 @@ void update_display() {
   tft.setTextWrap(true);
   tft.setTextColor(CYAN, BLACK);
   tft.setTextSize(2);
-  tft.setCursor(4, 40);
+  tft.setCursor(0, 40);
   for (int i = 0; i < NUM_CLUES; i++)
     tft.println(chosen_clues[current_box_num][i]);
-
   if (show_hint)
     for (int i = 0; i < NUM_HINTS; i++)
       tft.println(chosen_hints[current_box_num][i]);
@@ -444,22 +474,4 @@ void generate_hints(int arr[][NUM_HINTS], int length, int range) {
       arr[i][j] = randomNumber;
     }
   }
-}
-
-void check_win() {
-  if (httpGETRequest(statusPage) == "game over"){
-    start = false;
-    clear_screen();
-    tft.setCursor(20, 20);
-    tft.setTextSize(4);
-    tft.setTextColor(GREEN, BLACK);
-    tft.println("YOU WIN!!!");
-    tft.setCursor(20, 80);
-    tft.setTextSize(2);
-    tft.print("Elapsed Time: ");
-    tft.print(httpGETRequest(gameTime));
-    delay(10000); 
-    clear_screen();
-    setupOLED();
-    }
 }
